@@ -66,9 +66,83 @@ REQUIRED_COLS = [
 ]
 
 
+import os
+
+
 @st.cache_data
-def load_default_data(path: str = "data/energia_renovable.csv") -> pd.DataFrame:
-    return pd.read_csv(path)
+def generate_synthetic_data(n: int = 500, seed: int = 42) -> pd.DataFrame:
+    """
+    Genera un dataset sintético de proyectos de energía renovable en Colombia,
+    con el esquema exacto solicitado. Se usa como dataset de ejemplo cuando el
+    usuario no ha subido su propio CSV, y NO depende de ningún archivo externo,
+    por lo que nunca falla en el despliegue (Streamlit Cloud, Docker, etc.).
+    """
+    rng = np.random.default_rng(seed)
+
+    tech_params = {
+        # (costo_musd_por_mw, factor_planta, participación en el portafolio)
+        "Hidroeléctrica": {"costo_mw": (1.4, 1.9), "fp": (0.48, 0.62), "share": 0.28},
+        "Eólica":         {"costo_mw": (1.2, 1.6), "fp": (0.28, 0.42), "share": 0.20},
+        "Solar":          {"costo_mw": (0.7, 1.1), "fp": (0.16, 0.24), "share": 0.30},
+        "Biomasa":        {"costo_mw": (2.0, 2.5), "fp": (0.52, 0.66), "share": 0.13},
+        "Geotérmica":     {"costo_mw": (2.6, 3.2), "fp": (0.68, 0.80), "share": 0.09},
+    }
+    operadores = [
+        "EPM", "Celsia", "ISAGEN", "AES Colombia", "Enel Colombia",
+        "Ecopetrol Energía", "Air-e", "Emgesa", "Trina Solar Colombia",
+        "Cubico Sustainable", "Grupo Energía Bogotá", "Vatia S.A.",
+        "Fenoco Renovables", "Andina Green Power", "Zelestra Colombia",
+    ]
+    estados = ["Operativo", "En Construcción", "Mantenimiento", "Fuera de Servicio"]
+    estado_probs = [0.68, 0.15, 0.11, 0.06]
+
+    techs = list(tech_params.keys())
+    tech_shares = [tech_params[t]["share"] for t in techs]
+    tecnologia = rng.choice(techs, size=n, p=tech_shares)
+
+    rows = []
+    for i in range(n):
+        tech = tecnologia[i]
+        p = tech_params[tech]
+
+        capacidad_mw = float(np.round(rng.lognormal(mean=np.log(35), sigma=0.75), 2))
+        capacidad_mw = float(np.clip(capacidad_mw, 1.5, 400))
+
+        costo_mw = max(rng.uniform(*p["costo_mw"]) * rng.normal(1.0, 0.12), 0.3)
+        inversion_musd = round(capacidad_mw * costo_mw, 2)
+
+        fp = np.clip(rng.normal(np.mean(p["fp"]), (p["fp"][1] - p["fp"][0]) / 3), 0.05, 0.92)
+        generacion_diaria = round(capacidad_mw * 24 * fp, 2)
+        eficiencia_pct = round(np.clip(fp * 100 * rng.normal(1.0, 0.05), 5, 98), 2)
+
+        conectado_sin = bool(rng.choice([True, False], p=[0.86, 0.14]))
+        estado = rng.choice(estados, p=estado_probs)
+        operador = rng.choice(operadores)
+
+        year, month, day = int(rng.integers(2005, 2026)), int(rng.integers(1, 13)), int(rng.integers(1, 28))
+
+        rows.append({
+            "ID_Proyecto": f"PROJ-{i+1:04d}",
+            "Tecnologia": tech,
+            "Operador": operador,
+            "Capacidad_Instalada_MW": capacidad_mw,
+            "Generacion_Diaria_MWh": generacion_diaria,
+            "Eficiencia_Planta_Pct": eficiencia_pct,
+            "Conectado_SIN": conectado_sin,
+            "Estado_Actual": estado,
+            "Inversion_Inicial_MUSD": inversion_musd,
+            "Fecha_Entrada_Operacion": f"{year:04d}-{month:02d}-{day:02d}",
+        })
+
+    return pd.DataFrame(rows)
+
+
+def find_bundled_csv() -> str | None:
+    """Busca un CSV real incluido en el repo; si no existe, se usa el sintético."""
+    for candidate in ("data/energia_renovable.csv", "energia_renovable.csv"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 @st.cache_data
@@ -107,8 +181,16 @@ if uploaded_file is not None:
         st.sidebar.error(f"No se pudo leer el archivo: {e}")
         st.stop()
 else:
-    raw_df = load_default_data()
-    data_source_msg = "Usando dataset de ejemplo incluido en el repositorio (`data/energia_renovable.csv`)."
+    bundled_csv = find_bundled_csv()
+    if bundled_csv:
+        raw_df = pd.read_csv(bundled_csv)
+        data_source_msg = f"Usando dataset incluido en el repositorio (`{bundled_csv}`)."
+    else:
+        raw_df = generate_synthetic_data()
+        data_source_msg = (
+            "Usando dataset de ejemplo generado automáticamente (no se encontró ningún CSV "
+            "en el repositorio). Sube tu archivo real desde el cargador de arriba."
+        )
 
 st.sidebar.caption(data_source_msg)
 

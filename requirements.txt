@@ -1,4 +1,6 @@
-pandas
-seaborn
-pyplot
-plotly
+streamlit>=1.36
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+seaborn>=0.13
+plotly>=5.20

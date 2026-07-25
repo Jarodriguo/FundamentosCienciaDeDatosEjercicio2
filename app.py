@@ -21,14 +21,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Paleta de color consistente por tecnología (se usa en Seaborn, Matplotlib y Plotly)
-TECH_COLORS = {
-    "Hidroeléctrica": "#1F6FB2",
-    "Eólica": "#3FA796",
-    "Solar": "#F2B134",
-    "Biomasa": "#8C564B",
-    "Geotérmica": "#C0392B",
-}
+# Paleta de color base (se asigna dinámicamente a las tecnologías que traiga
+# el CSV cargado, así que funciona sin importar cómo se llamen o cuántas sean).
+BASE_PALETTE = [
+    "#1F6FB2", "#3FA796", "#F2B134", "#8C564B", "#C0392B",
+    "#6A4C93", "#2E8B57", "#E07A5F", "#4C4C6D", "#B08968",
+]
+
+
+def build_tech_colors(tecnologias) -> dict:
+    """Asigna un color estable a cada tecnología presente en los datos."""
+    tecnologias = sorted(pd.unique(tecnologias))
+    return {
+        tech: BASE_PALETTE[i % len(BASE_PALETTE)]
+        for i, tech in enumerate(tecnologias)
+    }
+
 
 sns.set_theme(style="whitegrid", font_scale=0.95)
 plt.rcParams["axes.edgecolor"] = "#4a4a4a"
@@ -145,6 +153,19 @@ def find_bundled_csv() -> str | None:
     return None
 
 
+TRUE_VALUES = {"true", "1", "1.0", "si", "sí", "yes", "y", "verdadero"}
+FALSE_VALUES = {"false", "0", "0.0", "no", "n", "falso"}
+
+
+def coerce_bool(series: pd.Series) -> pd.Series:
+    """Convierte a booleano valores como 'Sí'/'No', '1'/'0', 'True'/'False', etc."""
+    if series.dtype == bool:
+        return series
+    return series.astype(str).str.strip().str.lower().map(
+        lambda v: True if v in TRUE_VALUES else (False if v in FALSE_VALUES else np.nan)
+    )
+
+
 @st.cache_data
 def process_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -152,6 +173,7 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
         df["Fecha_Entrada_Operacion"], errors="coerce"
     )
     df["Anio_Entrada"] = df["Fecha_Entrada_Operacion"].dt.year
+    df["Conectado_SIN"] = coerce_bool(df["Conectado_SIN"])
     # Métrica clave para la pregunta de negocio: cuántos MWh/día se generan
     # por cada millón de dólares invertido.
     df["Ratio_MWh_por_MUSD"] = (
@@ -195,6 +217,10 @@ else:
 st.sidebar.caption(data_source_msg)
 
 df = process_data(raw_df)
+
+# Se construye a partir de las tecnologías reales del CSV cargado (propio o de ejemplo),
+# así nunca falla por nombres de tecnología distintos a los del dataset de ejemplo.
+TECH_COLORS = build_tech_colors(df["Tecnologia"])
 
 # ────────────────────────────────────────────────────────────────────────────
 # FILTROS (sidebar)

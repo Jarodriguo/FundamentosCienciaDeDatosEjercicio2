@@ -44,14 +44,29 @@ plt.rcParams["figure.facecolor"] = "white"
 
 CUSTOM_CSS = """
 <style>
-    .stMetric {
+    /* Tarjetas de métricas (st.metric): fondo claro fijo + texto oscuro fijo,
+       para que se vean igual sin importar si el usuario tiene tema claro u oscuro. */
+    div[data-testid="stMetric"] {
         background-color: #f7f9fb;
         border: 1px solid #e6e9ec;
         border-radius: 10px;
         padding: 10px 6px;
     }
-    div[data-testid="stMetricValue"] { font-size: 1.5rem; }
-    h1, h2, h3 { color: #163a5f; }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+        color: #163a5f !important;
+    }
+    div[data-testid="stMetricLabel"] p {
+        color: #4a4a4a !important;
+    }
+    div[data-testid="stMetricDelta"] {
+        color: #163a5f !important;
+    }
+
+    /* Recuadros de "insight" (📌 / ✅): fondo claro fijo + texto oscuro fijo. */
+    .insight-box, .insight-box * {
+        color: #12263f !important;
+    }
     .insight-box {
         background-color: #eef4fa;
         border-left: 5px solid #1F6FB2;
@@ -59,6 +74,7 @@ CUSTOM_CSS = """
         border-radius: 6px;
         margin: 0.6rem 0 1.1rem 0;
     }
+    .insight-box b { color: #0a1d33 !important; }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
